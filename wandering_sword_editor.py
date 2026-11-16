@@ -27,6 +27,13 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 SLOT_CLASS = "/Script/JH.JHSaveGame"
 CONFIG_CLASS = "/Script/JH.JHSaveGameConfig"
 OPAQUE_PROPS = {"Quests", "JHGatherSpecs", "WorldWalkNPCInfos", "MonsterNPCInfos"}
+OPAQUE_PROP_ORDER = ("Quests", "JHGatherSpecs", "WorldWalkNPCInfos", "MonsterNPCInfos")
+OPAQUE_PROP_LABELS_KO = {
+    "Quests": "임무 진행도",
+    "JHGatherSpecs": "채집 상태",
+    "WorldWalkNPCInfos": "강호 행인 배치",
+    "MonsterNPCInfos": "적대 몬스터 배치",
+}
 MAX_INT32 = 2147483647
 MAX_FAVOR = 100
 MAX_SKILL_LEVEL = 10
@@ -1031,13 +1038,66 @@ def _prop_val(props: list[dict[str, Any]], name: str, default: Any = None) -> An
     return p.get("val", default) if p is not None else default
 
 
+def inspect_opaque_props(props: list[dict[str, Any]]) -> dict[str, Any]:
+    by_name: dict[str, dict[str, Any]] = {}
+    for p in props or []:
+        if not isinstance(p, dict):
+            continue
+        name = p.get("name")
+        if isinstance(name, str) and (name in OPAQUE_PROPS or "opaque" in p):
+            by_name[name] = p
+    names = list(OPAQUE_PROP_ORDER)
+    for extra in by_name:
+        if extra not in names:
+            names.append(extra)
+    items: list[dict[str, Any]] = []
+    total_bytes = 0
+    present_count = 0
+    for name in names:
+        prop = by_name.get(name)
+        present = prop is not None
+        byte_len = 0
+        if prop is not None:
+            raw_op = prop.get("opaque")
+            if isinstance(raw_op, (bytes, bytearray)):
+                byte_len = len(raw_op)
+            elif isinstance(prop.get("size"), int) and prop["size"] >= 0:
+                byte_len = int(prop["size"])
+            present_count += 1
+            total_bytes += byte_len
+        items.append(
+            {
+                "name": name,
+                "labelKo": OPAQUE_PROP_LABELS_KO.get(name, name),
+                "type": prop.get("type") if prop is not None else None,
+                "present": present,
+                "byteLength": byte_len,
+                "readOnly": True,
+                "preserved": True,
+                "status": "무손실 원형 보존 (읽기 전용)" if present else "미포함",
+            }
+        )
+    return {
+        "items": items,
+        "totalBytes": total_bytes,
+        "presentCount": present_count,
+        "readOnly": True,
+        "preserved": True,
+    }
+
+
 def inspect_doc(doc: dict[str, Any], cat: dict[str, Any]) -> dict[str, Any]:
     is_config = doc.get("cls") == CONFIG_CLASS
     props = doc.get("props") or []
+    opaque_info = inspect_opaque_props(props)
     out: dict[str, Any] = {
         "saveType": "전역 설정 저장" if is_config else "일반 슬롯 저장",
         "saveVersion": doc.get("ver"),
         "isConfig": is_config,
+        "opaqueProps": opaque_info["items"],
+        "opaqueTotalBytes": opaque_info["totalBytes"],
+        "opaquePresentCount": opaque_info["presentCount"],
+        "opaqueReadOnly": True,
     }
     if is_config:
         ids = list((find_prop(props, "InheritIds") or {}).get("items") or [])
@@ -1116,6 +1176,16 @@ def format_inspect_korean(info: dict[str, Any], file_path: str, sha256_hex: str)
         return "\n".join(lines)
     hero = info["hero"]
     team_str = ", ".join(info["teamNames"]) if info["teamNames"] else "우문일 단독"
+    opaque_items = info.get("opaqueProps") or []
+    opaque_parts = [
+        f"{item['name']}({item['labelKo']}): "
+        + (f"{item['byteLength']:,}B 보존" if item.get("present") else "미포함")
+        for item in opaque_items
+    ]
+    opaque_line = (
+        f"원형 보존 영역 (읽기 전용 · 총 {info.get('opaqueTotalBytes', 0):,}B · {info.get('opaquePresentCount', 0)}종): "
+        + ", ".join(opaque_parts)
+    )
     lines.extend(
         [
             f"현재 지역: {info['mapNameKo']} | 플레이 시간: {info['playTimeText']} | 전투 방식: {info['turnModeKo']}",
@@ -1129,6 +1199,7 @@ def format_inspect_korean(info: dict[str, Any], file_path: str, sha256_hex: str)
                 f"수련 현황: 무학 점수 {hero['skillExp']:,}, 경맥 점수 {hero['jingMaiPoint']:,}, "
                 f"습득 무공 {hero['skillCount']}종, 개통 혈도 {hero['meridianCount']}개"
             ),
+            opaque_line,
         ]
     )
     return "\n".join(lines)

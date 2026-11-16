@@ -465,6 +465,96 @@ class CliAndServerTests(unittest.TestCase):
                 after_q = sha256(wse.find_prop(rebuilt["props"], "Quests")["opaque"])
                 self.assertEqual(before_q, after_q)
 
+    def test_opaque_props_inspect_and_lossless_roundtrip(self) -> None:
+        work = tempfile.mkdtemp(dir=self.tmp)
+        sav_path = os.path.join(work, "opaque.sav")
+        doc = wse.decode_sav_bytes(Path(self.demo_slot_src).read_bytes())
+        payloads = {
+            "Quests": b"\x01\x02\x03\x04\x05\x06\x07\x08\x09",
+            "JHGatherSpecs": b"\x10\x20\x30\x40\x50",
+            "WorldWalkNPCInfos": b"\x11\x22\x33\x44\x55\x66\x77",
+            "MonsterNPCInfos": b"\x63\x58\x4d\x42\x37\x2c\x21\x16\x0b\x00",
+        }
+        none_idx = next(i for i, p in enumerate(doc["props"]) if p.get("name") == "None")
+        injected = [
+            {
+                "name": "Quests",
+                "name_enc": "latin1",
+                "type": "ArrayProperty",
+                "type_enc": "latin1",
+                "size": len(payloads["Quests"]),
+                "elem_type": "StructProperty",
+                "elem_enc": "latin1",
+                "guid_flag": 0,
+                "opaque": payloads["Quests"],
+            },
+            {
+                "name": "JHGatherSpecs",
+                "name_enc": "latin1",
+                "type": "MapProperty",
+                "type_enc": "latin1",
+                "size": len(payloads["JHGatherSpecs"]),
+                "key_type": ("IntProperty", "latin1"),
+                "val_type": ("IntProperty", "latin1"),
+                "guid_flag": 0,
+                "opaque": payloads["JHGatherSpecs"],
+            },
+            {
+                "name": "WorldWalkNPCInfos",
+                "name_enc": "latin1",
+                "type": "ArrayProperty",
+                "type_enc": "latin1",
+                "size": len(payloads["WorldWalkNPCInfos"]),
+                "elem_type": "StructProperty",
+                "elem_enc": "latin1",
+                "guid_flag": 0,
+                "opaque": payloads["WorldWalkNPCInfos"],
+            },
+            {
+                "name": "MonsterNPCInfos",
+                "name_enc": "latin1",
+                "type": "MapProperty",
+                "type_enc": "latin1",
+                "size": len(payloads["MonsterNPCInfos"]),
+                "key_type": ("IntProperty", "latin1"),
+                "val_type": ("StructProperty", "latin1"),
+                "guid_flag": 0,
+                "opaque": payloads["MonsterNPCInfos"],
+            },
+        ]
+        doc["props"][none_idx:none_idx] = injected
+        Path(sav_path).write_bytes(wse.encode_sav_bytes(doc))
+
+        code, out, err = run_cli(["inspect", sav_path, "--json"])
+        self.assertEqual(code, 0, err)
+        payload = json.loads(out)
+        summary = payload["summary"]
+        self.assertEqual(summary["opaquePresentCount"], 4)
+        self.assertEqual(summary["opaqueTotalBytes"], sum(len(v) for v in payloads.values()))
+        self.assertIs(summary["opaqueReadOnly"], True)
+        by_name = {item["name"]: item for item in summary["opaqueProps"]}
+        self.assertEqual(list(by_name.keys()), list(wse.OPAQUE_PROP_ORDER))
+        for name, raw_op in payloads.items():
+            self.assertIs(by_name[name]["present"], True)
+            self.assertEqual(by_name[name]["byteLength"], len(raw_op))
+            self.assertIs(by_name[name]["readOnly"], True)
+            self.assertIs(by_name[name]["preserved"], True)
+
+        code, text_out, err = run_cli(["inspect", sav_path])
+        self.assertEqual(code, 0, err)
+        self.assertIsNone(HANZI_RE.search(text_out))
+        for name in payloads:
+            self.assertIn(name, text_out)
+        self.assertIn("원형 보존 영역", text_out)
+
+        code, _, err = run_cli(["edit", sav_path, "--money", "777777"])
+        self.assertEqual(code, 0, err)
+        rebuilt = wse.decode_sav_bytes(Path(sav_path).read_bytes())
+        for name, raw_op in payloads.items():
+            prop = wse.find_prop(rebuilt["props"], name)
+            self.assertIsNotNone(prop)
+            self.assertEqual(sha256(prop["opaque"]), sha256(raw_op))
+
 
 if __name__ == "__main__":
     unittest.main()

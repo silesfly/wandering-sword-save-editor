@@ -35,6 +35,20 @@
     "MonsterNPCInfos": true
   };
 
+  var OPAQUE_PROP_ORDER = [
+    "Quests",
+    "JHGatherSpecs",
+    "WorldWalkNPCInfos",
+    "MonsterNPCInfos"
+  ];
+
+  var OPAQUE_PROP_LABELS_KO = {
+    "Quests": "임무 진행도",
+    "JHGatherSpecs": "채집 상태",
+    "WorldWalkNPCInfos": "강호 행인 배치",
+    "MonsterNPCInfos": "적대 몬스터 배치"
+  };
+
   function isArrayLikeBytes(v) {
     return v && typeof v === "object" && typeof v.byteLength === "number";
   }
@@ -1580,13 +1594,81 @@
     return hex;
   }
 
+  function inspectOpaqueProps(doc) {
+    var props = doc && Array.isArray(doc.props) ? doc.props : [];
+    var byName = {};
+    var i;
+    for (i = 0; i < props.length; i += 1) {
+      var p = props[i];
+      if (p && p.name && (OPAQUE_PROPS[p.name] === true || p.opaque !== undefined)) {
+        byName[p.name] = p;
+      }
+    }
+    var names = OPAQUE_PROP_ORDER.slice();
+    var extraKeys = Object.keys(byName);
+    for (i = 0; i < extraKeys.length; i += 1) {
+      if (names.indexOf(extraKeys[i]) < 0) names.push(extraKeys[i]);
+    }
+    var items = [];
+    var totalBytes = 0;
+    var presentCount = 0;
+    for (i = 0; i < names.length; i += 1) {
+      var name = names[i];
+      var prop = byName[name] || null;
+      var present = !!prop;
+      var byteLength = 0;
+      if (prop) {
+        if (prop.opaque && typeof prop.opaque.byteLength === "number") {
+          byteLength = prop.opaque.byteLength;
+        } else if (typeof prop.size === "number" && prop.size >= 0) {
+          byteLength = prop.size;
+        }
+        presentCount += 1;
+        totalBytes += byteLength;
+      }
+      items.push({
+        name: name,
+        labelKo: OPAQUE_PROP_LABELS_KO[name] || name,
+        type: prop ? prop.type : null,
+        present: present,
+        byteLength: byteLength,
+        readOnly: true,
+        preserved: true,
+        status: present ? "무손실 원형 보존 (읽기 전용)" : "미포함"
+      });
+    }
+    return {
+      items: items,
+      totalBytes: totalBytes,
+      presentCount: presentCount,
+      readOnly: true,
+      preserved: true
+    };
+  }
+
+  function inspect(doc) {
+    var opaque = inspectOpaqueProps(doc);
+    return {
+      saveVersion: doc ? doc.saveVersion : null,
+      className: doc && doc.className ? doc.className.str : null,
+      opaqueProps: opaque.items,
+      opaqueTotalBytes: opaque.totalBytes,
+      opaquePresentCount: opaque.presentCount,
+      readOnly: true,
+      preserved: true
+    };
+  }
+
   return {
+    OPAQUE_PROP_NAMES: OPAQUE_PROP_ORDER.slice(),
     decodeSavSync: decodeSavSync,
     encodeSavSync: encodeSavSync,
     decodeSav: decodeSav,
     encodeSav: encodeSav,
     decodeInner: decodeInner,
     encodeInner: encodeInner,
+    inspectOpaqueProps: inspectOpaqueProps,
+    inspect: inspect,
     sha256Hex: sha256Hex,
     toNumber: toNumber,
     BinReader: BinReader,

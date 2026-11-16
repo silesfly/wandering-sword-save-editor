@@ -532,6 +532,60 @@
     font-size: 0.88rem;
     text-align: center;
   }
+
+  .code-atlas-box {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-alt);
+    color: var(--text);
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+  }
+
+  .code-atlas-box h3 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+  }
+
+  .code-atlas-box h4 {
+    margin: 14px 0 6px;
+    font-size: 0.9rem;
+    color: var(--accent);
+  }
+
+  .code-atlas-box code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  .atlas-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 10px;
+  }
+
+  .atlas-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 0.8rem;
+  }
+
+  .atlas-note {
+    margin: 4px 0 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
 </style>
 </head>
 <body>
@@ -597,6 +651,7 @@
       <div class="panel-body">
         <h2>개요·전역</h2>
         <div id="overview-root" class="dynamic-root"></div>
+        <section id="editorCodeAtlasBox" class="code-atlas-box" aria-label="REA 코드·수식 아틀라스"></section>
       </div>
     </section>
 

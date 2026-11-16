@@ -43,10 +43,36 @@ async function testCatalog() {
   assert.strictEqual(Catalog.getItem(1).bucket, 0);
   const roots = [
     "items", "skills", "npcs", "mounts", "guilds", "mapViews", "mapCodes",
-    "meridians", "inherits", "attributes", "itemBuckets"
+    "meridians", "inherits", "attributes", "itemBuckets", "codeAtlas"
   ];
   const seen = new Set();
   for (const key of roots) walkStrings(Catalog[key], key, seen);
+
+  const atlas = Catalog.getCodeAtlas();
+  assert(atlas && atlas === Catalog.codeAtlas, "codeAtlas missing");
+  const combatIds = atlas.gasMmc.combat.map(m => m.id);
+  for (const id of ["AttackPowerMMC", "DefenseMMC", "CritMMC", "DodgeMMC", "MaxHealthMMC", "MaxManaMMC", "TurnRateMMC", "ActionPointMMC"]) {
+    assert(combatIds.includes(id), `missing combat MMC ${id}`);
+  }
+  const lifeIds = atlas.gasMmc.life.map(m => m.id);
+  for (const id of ["Alchemy", "Cooking", "DaZao", "Fishing", "Gathering", "ZhiYi"]) {
+    assert(lifeIds.includes(id), `missing life MMC ${id}`);
+  }
+  const specialIds = atlas.gasMmc.special.map(m => m.id);
+  assert(specialIds.includes("MMC_Special_XiXing"), "missing MMC_Special_XiXing");
+  const attrNames = atlas.attributeSet.items.map(a => a.name);
+  for (const name of ["CritChance", "CritMultiplier", "ArmorDamageReduction", "DodgeChance", "LifeSteal"]) {
+    assert(attrNames.includes(name), `missing JHAttributeSet ${name}`);
+  }
+  assert.strictEqual(atlas.extraDifficultyBuff.stages.length, 10, "ExtraDifficultyBuff must have 10 stages");
+  for (const tok of ["AllEnemies", "OnlyBoss", "Team"]) {
+    assert(atlas.extraDifficultyBuff.EExtraBuffType.includes(tok), `missing EExtraBuffType ${tok}`);
+  }
+  for (const tok of ["+2.5%", "25%", "CD-1", "CD+1"]) {
+    assert(atlas.extraDifficultyBuff.modifierTokens.includes(tok), `missing modifier token ${tok}`);
+  }
+  const smOpaque = atlas.saveManager.OPAQUE_PROPS.map(p => p.name);
+  assert.deepStrictEqual(smOpaque, ["Quests", "JHGatherSpecs", "WorldWalkNPCInfos", "MonsterNPCInfos"]);
 }
 
 async function testDemoAndPresets() {
@@ -216,6 +242,61 @@ async function testRealSaves() {
   return files.length;
 }
 
+async function testOpaquePropsInspectAndRoundtrip() {
+  const doc = Core.createDemoDoc();
+  const noneIdx = doc.props.findIndex(p => p && p.name === "None");
+  assert(noneIdx >= 0, "None terminator missing");
+  const payloads = {
+    Quests: { type: "ArrayProperty", extra: { elemType: { str: "StructProperty", enc: "latin1" } }, bytes: Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9]) },
+    JHGatherSpecs: { type: "MapProperty", extra: { keyType: { str: "IntProperty", enc: "latin1" }, valType: { str: "IntProperty", enc: "latin1" } }, bytes: Buffer.from([10, 20, 30, 40, 50]) },
+    WorldWalkNPCInfos: { type: "ArrayProperty", extra: { elemType: { str: "StructProperty", enc: "latin1" } }, bytes: Buffer.from([11, 22, 33, 44, 55, 66, 77]) },
+    MonsterNPCInfos: { type: "MapProperty", extra: { keyType: { str: "IntProperty", enc: "latin1" }, valType: { str: "StructProperty", enc: "latin1" } }, bytes: Buffer.from([99, 88, 77, 66, 55, 44, 33, 22, 11, 0]) }
+  };
+  const injected = Object.keys(payloads).map(name => ({
+    name,
+    nameEnc: "latin1",
+    type: payloads[name].type,
+    typeEnc: "latin1",
+    size: payloads[name].bytes.length,
+    ...payloads[name].extra,
+    guidFlag: 0,
+    opaque: new Uint8Array(payloads[name].bytes)
+  }));
+  doc.props.splice(noneIdx, 0, ...injected);
+
+  const encoded = Buffer.from(Codec.encodeSavSync(doc));
+  const decoded = Codec.decodeSavSync(encoded);
+  const inspected = Codec.inspect(decoded);
+  assert.strictEqual(inspected.readOnly, true);
+  assert.strictEqual(inspected.preserved, true);
+  assert.strictEqual(inspected.opaquePresentCount, 4);
+  const expectedTotal = Object.values(payloads).reduce((acc, p) => acc + p.bytes.length, 0);
+  assert.strictEqual(inspected.opaqueTotalBytes, expectedTotal);
+
+  for (const item of inspected.opaqueProps) {
+    assert.strictEqual(item.present, true);
+    assert.strictEqual(item.readOnly, true);
+    assert.strictEqual(item.preserved, true);
+    assert.strictEqual(item.byteLength, payloads[item.name].bytes.length);
+  }
+
+  const session = Core.createSession(Codec, Catalog);
+  await session.loadBytes(encoded, { filename: "opaque_test.sav" });
+  const sum = session.getSummary();
+  assert.strictEqual(sum.opaquePresentCount, 4);
+  assert.strictEqual(sum.opaqueTotalBytes, expectedTotal);
+  assert.strictEqual(sum.opaqueReadOnly, true);
+  assert.strictEqual(session.setMoney(8888888), true);
+
+  const reExported = Buffer.from(await session.exportBytes());
+  const reDecoded = Codec.decodeSavSync(reExported);
+  for (const name of Object.keys(payloads)) {
+    const prop = reDecoded.props.find(p => p && p.name === name);
+    assert(prop && prop.opaque, `opaque prop ${name} missing after roundtrip`);
+    assert.strictEqual(sha256(Buffer.from(prop.opaque)), sha256(payloads[name].bytes), `${name} opaque SHA-256 mismatch`);
+  }
+}
+
 function testHtmlBundle() {
   const file = path.resolve(__dirname, "../dist/WanderingSwordSaveEditor-v1.0.html");
   assert(fs.existsSync(file), "bundle missing");
@@ -226,6 +307,10 @@ function testHtmlBundle() {
   assert(!TAG_RE.test(html), "markup tag in bundle");
   assert(!/(?:https?|ftp|wss?):\/\/|(?:src|href|action|poster|data|cite)\s*=\s*["']?\s*\/\//i.test(html), "external URL in bundle");
   assert(html.includes('<meta name="ws-loopback-token" content="">'), "loopback meta missing");
+  assert(html.includes('id="editorCodeAtlasBox"'), "editorCodeAtlasBox missing in bundle");
+  for (const token of ["AttackPowerMMC", "MMC_Special_XiXing", "ArmorDamageReduction", "ExtraDifficultyBuff", "WorldWalkNPCInfos"]) {
+    assert(html.includes(token), `REA atlas token ${token} missing in bundle`);
+  }
 }
 
 (async () => {
@@ -234,6 +319,7 @@ function testHtmlBundle() {
     await testDemoAndPresets();
     testCorruptions();
     await testPureKoreanValidateMessages();
+    await testOpaquePropsInspectAndRoundtrip();
     const realCount = await testRealSaves();
     testHtmlBundle();
     console.log(`PASS test_editor.cjs (realSaves=${realCount})`);

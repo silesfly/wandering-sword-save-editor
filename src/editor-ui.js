@@ -677,6 +677,25 @@
     }).join("");
   }
 
+  function renderOpaquePropsTable(opaqueProps, totalBytes, presentCount) {
+    var items = Array.isArray(opaqueProps) ? opaqueProps : [];
+    if (!items.length) return "";
+    var rows = items.map(function (item) {
+      var sizeText = item.present ? (Number(item.byteLength || 0).toLocaleString("ko-KR") + " B") : "0 B (미포함)";
+      var statusText = item.status || (item.present ? "무손실 원형 보존 (읽기 전용)" : "미포함");
+      return '<tr><th scope="row" data-label="속성명"><code>' + escHtml(item.name) + "</code></th>" +
+        '<td data-label="설명">' + escHtml(item.labelKo || item.name) + "</td>" +
+        '<td data-label="형식">' + escHtml(item.type || "-") + "</td>" +
+        '<td data-label="바이트 크기">' + escHtml(sizeText) + "</td>" +
+        '<td data-label="보존 상태">' + escHtml(statusText) + "</td></tr>";
+    }).join("");
+    return '<div class="table-wrapper" tabindex="0" role="region" aria-label="SaveManager OPAQUE_PROPS 원형 보존 영역 (읽기 전용)">' +
+      "<table><caption>SaveManager GVAS OPAQUE_PROPS 원형 보존 메타 (읽기 전용 · 포함 " +
+      escHtml(String(presentCount || 0)) + "종 · 총 " + escHtml(Number(totalBytes || 0).toLocaleString("ko-KR")) + " B)</caption>" +
+      '<thead><tr><th scope="col">속성명</th><th scope="col">설명</th><th scope="col">형식</th><th scope="col">바이트 크기</th><th scope="col">보존 상태</th></tr></thead>' +
+      "<tbody>" + rows + "</tbody></table></div>";
+  }
+
   function renderOverviewPanel() {
     var root = el("overview-root");
     if (!root) return;
@@ -732,6 +751,7 @@
     }).join("");
     var realSel = sum.turnModeRaw === "ETurnMode::RealTime" ? " selected" : "";
     var turnSel = sum.turnModeRaw === "ETurnMode::TurnBased" ? " selected" : "";
+    var opaqueHtml = renderOpaquePropsTable(sum.opaqueProps, sum.opaqueTotalBytes, sum.opaquePresentCount);
     root.innerHTML = '<div class="card-grid">' + cards + '</div><div class="field-grid">' +
       '<div class="field-row"><label for="input-money">보유 금전</label>' +
       '<input id="input-money" type="number" min="0" max="2147483647" data-action="set-money" value="' + escHtml(String(sum.money)) + '"></div>' +
@@ -740,7 +760,8 @@
       '<option value="ETurnMode::RealTime"' + realSel + '>실시간 전투</option>' +
       '<option value="ETurnMode::TurnBased"' + turnSel + '>턴제 전투</option></select></div>' +
       '<div class="field-row"><label>복용 기록 관리</label>' +
-      '<button type="button" class="btn" data-action="reset-pill-limits">복용 제한 전체 초기화</button></div></div>';
+      '<button type="button" class="btn" data-action="reset-pill-limits">복용 제한 전체 초기화</button></div></div>' +
+      opaqueHtml;
   }
 
   function renderStatsPanel() {
@@ -941,9 +962,117 @@
       '<div class="stat-card"><span class="label">단조 도안</span><span class="value">' + escHtml((counts.fusion || 0) + "종") + "</span></div></div>";
   }
 
+  function renderCodeAtlasBox() {
+    var box = el("editorCodeAtlasBox");
+    if (!box) return;
+    var atlas = Catalog && (Catalog.codeAtlas || (typeof Catalog.getCodeAtlas === "function" && Catalog.getCodeAtlas()));
+    if (!atlas) {
+      box.innerHTML = "";
+      return;
+    }
+
+    var bin = atlas.binary || {};
+    var mmc = atlas.gasMmc || {};
+    var attrSet = atlas.attributeSet || {};
+    var diff = atlas.extraDifficultyBuff || {};
+    var sm = atlas.saveManager || {};
+
+    var combatRows = (mmc.combat || []).map(function (m) {
+      return '<tr><th scope="row" data-label="클래스"><code>' + escHtml(m.id) + "</code></th>" +
+        '<td data-label="분류">' + escHtml(m.category || "전투") + "</td>" +
+        '<td data-label="역할">' + escHtml(m.nameKo + " — " + m.note) + "</td></tr>";
+    }).join("");
+    var lifeRows = (mmc.life || []).map(function (m) {
+      return '<tr><th scope="row" data-label="클래스"><code>' + escHtml(m.id) + "</code></th>" +
+        '<td data-label="분류">' + escHtml(m.category || "생활") + "</td>" +
+        '<td data-label="역할">' + escHtml(m.nameKo + " — " + m.note) + "</td></tr>";
+    }).join("");
+    var specialRows = (mmc.special || []).map(function (m) {
+      return '<tr><th scope="row" data-label="클래스"><code>' + escHtml(m.id) + "</code></th>" +
+        '<td data-label="XREF">' + escHtml(m.xref || "-") + "</td>" +
+        '<td data-label="역할">' + escHtml(m.nameKo + " — " + m.note) + "</td></tr>";
+    }).join("");
+
+    var attrRows = (attrSet.items || []).map(function (a) {
+      return '<tr><th scope="row" data-label="속성"><code>' + escHtml(a.name) + "</code></th>" +
+        '<td data-label="한국어">' + escHtml(a.nameKo || "-") + "</td>" +
+        '<td data-label="XREF">' + escHtml(a.xref || "-") + "</td>" +
+        '<td data-label="설명">' + escHtml(a.note || "-") + "</td></tr>";
+    }).join("");
+
+    var stageRows = (diff.stages || []).map(function (st) {
+      return '<tr><th scope="row" data-label="단계">' + escHtml(String(st.tier)) + "단계</th>" +
+        '<td data-label="테이블 행"><code>' + escHtml(st.rowName) + "</code></td>" +
+        '<td data-label="적용 대상">' + escHtml(st.scope) + "</td>" +
+        '<td data-label="보정 토큰">' + escHtml(st.tokens) + "</td></tr>";
+    }).join("");
+
+    var loadedOpaque = session.isLoaded() ? session.getSummary().opaqueProps : null;
+    var loadedByName = {};
+    if (Array.isArray(loadedOpaque)) {
+      loadedOpaque.forEach(function (op) {
+        if (op && op.name) loadedByName[op.name] = op;
+      });
+    }
+    var smRows = (sm.OPAQUE_PROPS || []).map(function (op) {
+      var live = loadedByName[op.name];
+      var liveText = live
+        ? (live.present ? (Number(live.byteLength || 0).toLocaleString("ko-KR") + " B (보존)") : "0 B (미포함)")
+        : "세이브 로드 대기";
+      return '<tr><th scope="row" data-label="속성"><code>' + escHtml(op.name) + "</code></th>" +
+        '<td data-label="설명">' + escHtml(op.labelKo) + "</td>" +
+        '<td data-label="형식">' + escHtml(op.types) + "</td>" +
+        '<td data-label="현재 크기">' + escHtml(liveText) + "</td>" +
+        '<td data-label="보존 정책">' + escHtml(op.policy) + "</td></tr>";
+    }).join("");
+
+    var enumChips = (diff.EExtraBuffType || []).map(function (t) {
+      return '<span class="atlas-chip"><code>' + escHtml(t) + "</code></span>";
+    }).join("");
+    var tokenChips = (diff.modifierTokens || []).map(function (tok) {
+      return '<span class="atlas-chip"><code>' + escHtml(tok) + "</code></span>";
+    }).join("");
+
+    box.innerHTML =
+      "<h3>REA 역공학 코드·수식 아틀라스</h3>" +
+      '<p class="atlas-note">실측 바이너리: <code>' + escHtml(bin.executable || "JH-Win64-Shipping.exe") +
+      "</code> · <code>" + escHtml(bin.engine || "UE4.26.2") + "</code> · <code>" +
+      escHtml(bin.abilitySystem || "UE4 GAS") + "</code></p>" +
+      "<h4>1. UE4 GAS MMC (전투 8종 · 생활 6종 · 특수·퍼센트 5종)</h4>" +
+      '<div class="table-wrapper" tabindex="0" role="region" aria-label="UE4 GAS MMC 전투 및 생활 목록">' +
+      "<table><caption>전투 MMC 8종 및 생활 MMC 6종</caption>" +
+      '<thead><tr><th scope="col">클래스</th><th scope="col">분류</th><th scope="col">역할</th></tr></thead>' +
+      "<tbody>" + combatRows + lifeRows + "</tbody></table></div>" +
+      '<div class="table-wrapper" tabindex="0" role="region" aria-label="UE4 GAS 특수 및 버프 보정 MMC 목록">' +
+      "<table><caption>특수·버프 퍼센트 보정 MMC (XREF 실측)</caption>" +
+      '<thead><tr><th scope="col">클래스</th><th scope="col">바이너리 XREF</th><th scope="col">역할</th></tr></thead>' +
+      "<tbody>" + specialRows + "</tbody></table></div>" +
+      "<h4>2. JHAttributeSet 핵심 전투 속성 (XREF 실측)</h4>" +
+      '<div class="table-wrapper" tabindex="0" role="region" aria-label="JHAttributeSet 속성 목록">' +
+      "<table><caption>" + escHtml(attrSet.className || "JHAttributeSet") + "</caption>" +
+      '<thead><tr><th scope="col">속성</th><th scope="col">한국어</th><th scope="col">XREF</th><th scope="col">설명</th></tr></thead>' +
+      "<tbody>" + attrRows + "</tbody></table></div>" +
+      "<h4>3. 고난도 추가 버프 (ExtraDifficultyBuff 1~10단계)</h4>" +
+      '<p class="atlas-note">열거형 <code>' + escHtml(diff.enumType || "EExtraBuffType") +
+      "</code> · 필드: <code>" + escHtml((diff.fields || []).join(", ")) + "</code></p>" +
+      '<div class="atlas-chip-row">' + enumChips + tokenChips + "</div>" +
+      '<div class="table-wrapper" tabindex="0" role="region" aria-label="ExtraDifficultyBuff 1~10단계 구조">' +
+      "<table><caption>ExtraDifficultyBuff 1~10단계</caption>" +
+      '<thead><tr><th scope="col">단계</th><th scope="col">행</th><th scope="col">대상 유형</th><th scope="col">보정 토큰</th></tr></thead>' +
+      "<tbody>" + stageRows + "</tbody></table></div>" +
+      "<h4>4. SaveManager GVAS OPAQUE_PROPS 무손실 보존 구조</h4>" +
+      '<p class="atlas-note"><code>' + escHtml(sm.source || "SaveManager.cpp / UE4 GVAS") + "</code> · 클래스: <code>" +
+      escHtml((sm.classes || []).join(", ")) + "</code> · " + escHtml(sm.compression || "") + "</p>" +
+      '<div class="table-wrapper" tabindex="0" role="region" aria-label="SaveManager OPAQUE_PROPS 보존 구조">' +
+      "<table><caption>SaveManager OPAQUE_PROPS 보존 대상 4종</caption>" +
+      '<thead><tr><th scope="col">속성</th><th scope="col">설명</th><th scope="col">형식</th><th scope="col">현재 세이브 크기</th><th scope="col">보존 정책</th></tr></thead>' +
+      "<tbody>" + smRows + "</tbody></table></div>";
+  }
+
   function renderAll() {
     renderPresetBar();
     renderOverviewPanel();
+    renderCodeAtlasBox();
     renderStatsPanel();
     renderMartialPanel();
     renderBagPanel();

@@ -583,6 +583,9 @@
 
     function getSummary() {
       var doc = requireDoc();
+      var opaqueMeta = typeof codec.inspectOpaqueProps === "function"
+        ? codec.inspectOpaqueProps(doc)
+        : { items: [], totalBytes: 0, presentCount: 0, readOnly: true, preserved: true };
       var summary;
       if (isConfigDoc(doc)) {
         var inheritIds = (findProp(doc, "InheritIds") || {}).val || [];
@@ -627,7 +630,11 @@
           itemBookCount: itemIds.length,
           teamBookCount: cfgTeamIds.length,
           endingCount: endingIds.length,
-          slotSummaries: slotSummaries
+          slotSummaries: slotSummaries,
+          opaqueProps: opaqueMeta.items,
+          opaqueTotalBytes: opaqueMeta.totalBytes,
+          opaquePresentCount: opaqueMeta.presentCount,
+          opaqueReadOnly: true
         };
         return summary;
       }
@@ -702,6 +709,10 @@
           cooking: (propVal(doc, "CookingRecipes", []) || []).length,
           fusion: (propVal(doc, "FusionRecipes", []) || []).length
         },
+        opaqueProps: opaqueMeta.items,
+        opaqueTotalBytes: opaqueMeta.totalBytes,
+        opaquePresentCount: opaqueMeta.presentCount,
+        opaqueReadOnly: true,
         hero: heroSummary
       };
     }
