@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>
+  try {
+    var wsTheme = localStorage.getItem("ws-theme");
+    if (wsTheme === "light" || wsTheme === "dark") {
+      var wsMeta = document.querySelector('meta[name="color-scheme"]');
+      if (wsMeta) { wsMeta.setAttribute("content", wsTheme); }
+    }
+  } catch (e) {}
+</script>
+<meta name="ws-loopback-token" content="">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+<title>일검풍운결 세이브 에디터 v1.0</title>
+<style>
+  * { box-sizing: border-box; }
+
+  html,
+  body { margin: 0; padding: 0; }
+
+  :root { color-scheme: light dark; }
+
+  :root:has(> head > meta[name="color-scheme"][content="dark"]) { color-scheme: dark; }
+
+  :root:has(> head > meta[name="color-scheme"][content="light"]) { color-scheme: light; }
+
+  :root {
+    --bg: #f3f4f7;
+    --surface: #ffffff;
+    --surface-alt: #e9ecf2;
+    --border: #d2d7e0;
+    --text: #1b1e26;
+    --muted: #59606e;
+    --accent: #2f6fed;
+    --accent-soft: #dbe6ff;
+    --danger: #b83b2f;
+    --ok: #1f8a5b;
+    --radius: 10px;
+    --shadow: 0 16px 40px rgba(20, 24, 33, 0.22);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101218;
+      --surface: #181b23;
+      --surface-alt: #21252f;
+      --border: #333947;
+      --text: #e8eaf0;
+      --muted: #a3a9b8;
+      --accent: #7ea6ff;
+      --accent-soft: #23304d;
+      --danger: #ff8a7c;
+      --ok: #62d6a2;
+      --shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+    }
+  }
+
+  @supports (color: light-dark(white, black)) {
+    :root {
+      --bg: light-dark(#f3f4f7, #101218);
+      --surface: light-dark(#ffffff, #181b23);
+      --surface-alt: light-dark(#e9ecf2, #21252f);
+      --border: light-dark(#d2d7e0, #333947);
+      --text: light-dark(#1b1e26, #e8eaf0);
+      --muted: light-dark(#59606e, #a3a9b8);
+      --accent: light-dark(#2f6fed, #7ea6ff);
+      --accent-soft: light-dark(#dbe6ff, #23304d);
+      --danger: light-dark(#b83b2f, #ff8a7c);
+      --ok: light-dark(#1f8a5b, #62d6a2);
+    }
+  }
+
+  body {
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    max-inline-size: 1180px;
+    margin: 0 auto;
+    padding: 18px 18px 48px;
+  }
+
+  .top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .top-bar h1 {
+    margin: 0;
+    font-size: 1.22rem;
+    letter-spacing: -0.01em;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .badge-ok { color: var(--ok); border-color: var(--ok); }
+  .badge-danger, .badge.is-dirty, .badge.is-error { color: var(--danger); border-color: var(--danger); }
+
+  .theme-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.86rem;
+  }
+
+  .theme-control select,
+  .server-bar select,
+  .field-row select,
+  .field-row input,
+  .toolbar-row select,
+  .toolbar-row input,
+  .dialog-body input,
+  .table-wrapper input {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+  }
+
+  .server-bar select { min-inline-size: 200px; }
+
+  .status-banner {
+    margin-block: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--accent);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .status-banner.is-error {
+    border-inline-start-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .file-actions,
+  .server-bar,
+  .preset-bar,
+  .toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-block: 10px;
+  }
+
+  .server-bar[hidden] { display: none !important; }
+
+  .btn {
+    font: inherit;
+    font-size: 0.88rem;
+    padding: 7px 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .btn:hover { background: var(--surface-alt); }
+  .btn:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    color: light-dark(#ffffff, #0b1220);
+  }
+
+  .btn-danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .btn-primary:hover { filter: brightness(1.06); }
+
+  .preset-label {
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+
+  .preset-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    margin-block: 18px 0;
+    border-block-end: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .tab-bar [role="tab"] {
+    font: inherit;
+    font-size: 0.92rem;
+    padding: 10px 14px;
+    border: 1px solid transparent;
+    border-block-end: 0;
+    border-start-start-radius: 9px;
+    border-start-end-radius: 9px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .tab-bar [role="tab"]:hover { color: var(--text); background: var(--surface-alt); }
+  .tab-bar [role="tab"]:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: -2px; }
+
+  [role="tab"][aria-selected="true"] { position: relative; }
+
+  [role="tab"][aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    border-block-end: 3px solid var(--accent);
+  }
+
+  .tab-bar [role="tab"][aria-selected="true"] {
+    color: var(--text);
+    background: var(--surface);
+    border-color: var(--border);
+    border-block-end-color: transparent;
+  }
+
+  .panel { margin-block-start: -1px; }
+
+  .panel-body {
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .panel-body h2 {
+    margin: 0 0 12px;
+    font-size: 1.04rem;
+  }
+
+  .panel-body h3 {
+    margin: 18px 0 10px;
+    font-size: 0.96rem;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .stat-card {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-alt);
+  }
+
+  .stat-card .label {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .stat-card .value {
+    display: block;
+    margin-top: 4px;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .field-row label {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .dynamic-root:empty::before {
+    content: "세이브를 불러오면 이 영역에 편집 항목이 표시됩니다.";
+    display: block;
+    padding: 16px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+
+  .notice-box {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  .notice-box strong { color: var(--accent); }
+
+  .table-wrapper {
+    container-type: inline-size;
+    overflow: auto;
+    max-block-size: 520px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 10px;
+  }
+
+  .table-wrapper:focus-visible {
+    outline: 3px solid var(--accent-soft);
+    outline-offset: 2px;
+  }
+
+  .table-wrapper table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .table-wrapper caption {
+    padding: 10px 12px;
+    text-align: start;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--surface);
+  }
+
+  .table-wrapper thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-alt);
+    color: var(--muted);
+    text-align: start;
+    font-weight: 600;
+    padding: 9px 12px;
+    border-block-end: 1px solid var(--border);
+  }
+
+  .table-wrapper tbody th,
+  .table-wrapper tbody td {
+    padding: 8px 12px;
+    border-block-end: 1px solid var(--border);
+    text-align: start;
+    vertical-align: middle;
+  }
+
+  .table-wrapper tbody th {
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface-alt);
+  }
+
+  .table-wrapper tbody tr:last-child th,
+  .table-wrapper tbody tr:last-child td { border-block-end: 0; }
+
+  @container (width < 600px) {
+    .table-wrapper thead { display: none; }
+
+    .table-wrapper tbody tr {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+      padding: 10px 12px;
+      border-block-end: 1px solid var(--border);
+    }
+
+    .table-wrapper tbody th,
+    .table-wrapper tbody td {
+      display: block;
+      padding: 2px 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .table-wrapper tbody th::before,
+    .table-wrapper tbody td::before {
+      content: attr(data-label) ": ";
+      font-weight: 600;
+      color: var(--muted);
+    }
+  }
+
+  dialog {
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    max-inline-size: min(92vw, 540px);
+    inline-size: 100%;
+    box-shadow: var(--shadow);
+  }
+
+  dialog[open] { display: block; }
+
+  dialog:modal { overscroll-behavior: contain; }
+
+  dialog::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 22px;
+  }
+
+  .dialog-body h2 {
+    margin: 0 0 4px;
+    font-size: 1.02rem;
+  }
+
+  .dialog-text {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .picker-list {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 4px;
+    max-block-size: 280px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .picker-item {
+    display: block;
+    inline-size: 100%;
+    text-align: start;
+    font: inherit;
+    font-size: 0.87rem;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .picker-item:hover { background: var(--surface-alt); }
+  .picker-item.is-selected {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .picker-list:empty::before {
+    content: "선택할 수 있는 항목이 없습니다.";
+    display: block;
+    padding: 14px;
+    color: var(--muted);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top-bar">
+    <div class="brand">
+      <h1>일검풍운결 세이브 에디터 v1.0</h1>
+      <div class="badges">
+        <span id="mode-badge" class="badge">오프라인 브라우저 모드</span>
+        <span id="dirty-badge" class="badge">비어 있음</span>
+        <span id="valid-badge" class="badge">검증 대기</span>
+      </div>
+    </div>
+    <label class="theme-control" for="theme-select">
+      <span>화면 테마</span>
+      <select id="theme-select">
+        <option value="system">시스템 설정</option>
+        <option value="light">밝은 화면</option>
+        <option value="dark">어두운 화면</option>
+      </select>
+    </label>
+  </header>
+
+  <div id="status-banner" class="status-banner" role="status" aria-live="polite">
+    세이브 파일을 열거나 체험판 세이브를 불러오세요.
+  </div>
+
+  <section class="file-actions" aria-label="파일 작업">
+    <input id="file-input" type="file" accept=".sav" hidden>
+    <button id="btn-browser-open" type="button" class="btn btn-primary">세이브 파일 열기</button>
+    <button id="btn-load-demo" type="button" class="btn">체험판 세이브 불러오기</button>
+    <button id="btn-browser-download" type="button" class="btn">수정본 다운로드 (.sav)</button>
+  </section>
+
+  <section id="loopback-bar" class="server-bar" aria-label="로컬 서버 연결" hidden>
+    <select id="loopback-file-select" aria-label="서버 세이브 목록"></select>
+    <button id="btn-loopback-open" type="button" class="btn">선택 파일 열기</button>
+    <button id="btn-loopback-save" type="button" class="btn btn-primary">원본 백업 후 저장</button>
+  </section>
+
+  <section id="native-bar" class="server-bar" aria-label="데스크톱 앱 연결" hidden>
+    <button id="btn-native-open" type="button" class="btn">세이브 열기</button>
+    <button id="btn-native-save" type="button" class="btn btn-primary">저장 (자동 백업)</button>
+    <button id="btn-native-save-copy" type="button" class="btn">다른 이름으로 저장</button>
+  </section>
+
+  <div id="preset-bar" class="preset-bar" role="group" aria-label="빠른 프리셋">
+    <span class="preset-label">빠른 프리셋</span>
+    <div id="preset-buttons" class="preset-buttons"></div>
+  </div>
+
+  <div role="tablist" aria-label="편집 분류" class="tab-bar">
+    <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" tabindex="0">개요·전역</button>
+    <button type="button" role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="false" tabindex="-1">인물·능력치</button>
+    <button type="button" role="tab" id="tab-martial" aria-controls="panel-martial" aria-selected="false" tabindex="-1">무공·경맥</button>
+    <button type="button" role="tab" id="tab-bag" aria-controls="panel-bag" aria-selected="false" tabindex="-1">가방 물품</button>
+    <button type="button" role="tab" id="tab-companions" aria-controls="panel-companions" aria-selected="false" tabindex="-1">동료·문파</button>
+    <button type="button" role="tab" id="tab-world" aria-controls="panel-world" aria-selected="false" tabindex="-1">탈것·도안·전승</button>
+  </div>
+
+  <main>
+    <section role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" class="panel">
+      <div class="panel-body">
+        <h2>개요·전역</h2>
+        <div id="overview-root" class="dynamic-root"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-stats" aria-labelledby="tab-stats" class="panel" hidden="until-found">
+      <div class="panel-body">
+        <h2>인물·능력치</h2>
+        <div id="stats-root" class="dynamic-root"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-martial" aria-labelledby="tab-martial" class="panel" hidden="until-found">
+      <div class="panel-body">
+        <h2>무공·경맥</h2>
+        <div class="notice-box" role="note">
+          <strong>안내:</strong> 경맥의 능력치 상승 효과는 인게임 돌파 시점에 합산됩니다. 경맥 점수를 넉넉히 부여한 뒤 게임 내 경맥 화면에서 '일괄 돌파'를 실행하면 누락 없이 모든 내공·기혈 보너스가 정상 반영됩니다.
+        </div>
+        <div id="martial-root" class="dynamic-root"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-bag" aria-labelledby="tab-bag" class="panel" hidden="until-found">
+      <div class="panel-body">
+        <h2>가방 물품</h2>
+        <div id="bag-root" class="dynamic-root"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-companions" aria-labelledby="tab-companions" class="panel" hidden="until-found">
+      <div class="panel-body">
+        <h2>동료·문파</h2>
+        <div id="companions-root" class="dynamic-root"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-world" aria-labelledby="tab-world" class="panel" hidden="until-found">
+      <div class="panel-body">
+        <h2>탈것·도안·전승</h2>
+        <div id="world-root" class="dynamic-root"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title">
+    <div class="dialog-body">
+      <h2 id="confirm-dialog-title">작업 확인</h2>
+      <p id="confirm-dialog-message" class="dialog-text"></p>
+      <div class="dialog-actions">
+        <button type="button" id="confirm-cancel-btn" class="btn" autofocus>취소</button>
+        <button type="button" id="confirm-ok-btn" class="btn btn-primary">확인</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="picker-dialog" aria-labelledby="picker-dialog-title">
+    <div class="dialog-body">
+      <h2 id="picker-dialog-title">항목 추가</h2>
+      <label for="picker-search-input">이름 또는 번호 검색</label>
+      <input id="picker-search-input" type="search" placeholder="예: 일전혈기단, 태극검법, 100">
+      <label for="picker-count-input" id="picker-count-label">수량 / 등급</label>
+      <input id="picker-count-input" type="number" min="1" max="9999" value="1">
+      <ul id="picker-list" class="picker-list" role="listbox" aria-label="검색 결과"></ul>
+      <div class="dialog-actions">
+        <button type="button" id="picker-cancel-btn" class="btn" autofocus>닫기</button>
+        <button type="button" id="picker-add-btn" class="btn btn-primary">선택 항목 추가</button>
+      </div>
+    </div>
+  </dialog>
+</div>
+
+<!-- BUNDLE_SCRIPTS_START -->
+<script src="./catalog-data.js"></script>
+<script src="./gvas-codec.js"></script>
+<script src="./editor-core.js"></script>
+<script src="./editor-ui.js"></script>
+<!-- BUNDLE_SCRIPTS_END -->
+</body>
+</html>

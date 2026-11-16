@@ -1,0 +1,34 @@
+# Save files & backups (never commit personal saves)
+*.sav
+*.bak
+*.tmp
+*.tmp-*
+*.pending-*
+*.rollback-*
+*.rsp
+
+# Python / Node
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+node_modules/
+
+# OS / IDE / Handoff / Working state
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.playwright-mcp/
+HANDOFF*.md
+work/
+receipt.json
+failure.txt
+release/
+vendor/
+private-evidence/
+
+# Build outputs: keep dist/WanderingSwordSaveEditor-v1.0.html tracked
+dist/*.exe
+dist/*.pdb
+dist/*.zip
